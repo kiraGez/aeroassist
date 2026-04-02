@@ -1,5 +1,7 @@
 'use client'
 
+'use client'
+
 import { useState, useEffect } from 'react'
 import { Upload, FileText, Trash2, Check, X } from 'lucide-react'
 

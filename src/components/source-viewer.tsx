@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+'use client'
+
 import { X, BookOpen } from 'lucide-react'
 
 interface SourceViewerProps {

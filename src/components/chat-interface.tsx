@@ -1,8 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useRef, useEffect } from 'react'
 import { User } from '@supabase/supabase-js'
-import { Bot, User as UserIcon, Settings, LogOut, Plane, Upload } from 'lucide-react'
+import { Bot, User as UserIcon, LogOut, Plane, Upload } from 'lucide-react'
 import { ChatMessage, ChatInput, TypingIndicator, WelcomeMessage, type Message } from './chat'
 import { AdminDashboard } from './admin'
 import { SourceViewer } from './source-viewer'
