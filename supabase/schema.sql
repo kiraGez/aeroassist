@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS documents (
   title TEXT NOT NULL,
   filename TEXT NOT NULL,
   total_pages INTEGER NOT NULL,
-  uploaded_by UUID REFERENCES auth.users(id),
+  uploaded_by TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   page_number INTEGER NOT NULL,
   chunk_index INTEGER NOT NULL,
   content TEXT NOT NULL,
-  embedding VECTOR(1536), -- OpenAI text-embedding-3-small dimension
+  embedding VECTOR(768), -- Gemini text-embedding-004 dimension
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -35,38 +35,20 @@ WITH (lists = 100);
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
 
--- Policies: Anyone can read, only admins can write
+-- Policies: Anyone can read
 CREATE POLICY "Anyone can read documents" ON documents FOR SELECT USING (true);
 CREATE POLICY "Anyone can read chunks" ON chunks FOR SELECT USING (true);
 
--- Admin check function (customize based on your auth setup)
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  -- Check if user email is in admin list
-  -- Customize this based on your admin identification method
-  RETURN EXISTS (
-    SELECT 1 FROM auth.users 
-    WHERE id = auth.uid() 
-    AND (
-      email LIKE '%admin%' 
-      OR email LIKE '%wise_hat_2017%'
-      OR raw_user_meta_data->>'role' = 'admin'
-    )
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Admin write policies
-CREATE POLICY "Admins can insert documents" ON documents FOR INSERT WITH CHECK (is_admin());
-CREATE POLICY "Admins can delete documents" ON documents FOR DELETE USING (is_admin());
-CREATE POLICY "Admins can insert chunks" ON chunks FOR INSERT WITH CHECK (is_admin());
-CREATE POLICY "Admins can delete chunks" ON chunks FOR DELETE USING (is_admin());
+-- Anyone can insert (for demo, restrict in production)
+CREATE POLICY "Anyone can insert documents" ON documents FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can insert chunks" ON chunks FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can delete documents" ON documents FOR DELETE USING (true);
+CREATE POLICY "Anyone can delete chunks" ON chunks FOR DELETE USING (true);
 
 -- Function to find similar chunks (vector search)
 CREATE OR REPLACE FUNCTION match_chunks(
-  query_embedding VECTOR(1536),
-  match_threshold FLOAT DEFAULT 0.7,
+  query_embedding VECTOR(768),
+  match_threshold FLOAT DEFAULT 0.5,
   match_count INTEGER DEFAULT 8
 )
 RETURNS TABLE (

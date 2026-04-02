@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { classifyIntent } from '@/lib/intent-router'
 import { searchChunks, keywordSearch } from '@/lib/search'
 import { generateResponse } from '@/lib/generation'
@@ -21,18 +19,11 @@ export async function POST(request: NextRequest) {
     let context: any[] = []
     
     if (intent.type !== 'conversational') {
-      // Use keywords from intent classification for better search
-      if (intent.keywords && intent.keywords.length > 0) {
-        // Combine vector search with keyword matching
-        context = await searchChunks(query)
-        
-        // If vector search returns few results, augment with keyword search
-        if (context.length < 3 && intent.keywords.length > 0) {
-          const keywordResults = await keywordSearch(intent.keywords)
-          context = [...context, ...keywordResults].slice(0, 8)
-        }
-      } else {
-        context = await searchChunks(query)
+      context = await searchChunks(query)
+      
+      if (context.length < 3 && intent.keywords && intent.keywords.length > 0) {
+        const keywordResults = await keywordSearch(intent.keywords)
+        context = [...context, ...keywordResults].slice(0, 8)
       }
     }
 

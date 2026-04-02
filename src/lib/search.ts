@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { generateEmbedding } from './openai'
+import { generateEmbedding } from './ai'
 
 export interface SearchResult {
   id: string
@@ -19,7 +19,7 @@ export async function searchChunks(
     includeAdjacent?: boolean
   } = {}
 ): Promise<SearchResult[]> {
-  const { matchThreshold = 0.6, matchCount = 8, includeAdjacent = true } = options
+  const { matchThreshold = 0.5, matchCount = 8, includeAdjacent = true } = options
 
   try {
     // Generate embedding for query
@@ -32,7 +32,10 @@ export async function searchChunks(
       match_count: matchCount
     })
 
-    if (error) throw error
+    if (error) {
+      console.error('Search error:', error)
+      return []
+    }
     if (!matches || matches.length === 0) return []
 
     // Enrich with document titles
@@ -70,14 +73,11 @@ async function enrichWithAdjacentPages(results: SearchResult[]): Promise<SearchR
   const enriched: SearchResult[] = []
   
   for (const result of results) {
-    // Add the main result
     enriched.push(result)
     
-    // Fetch previous and next page if not already in results
     const adjacentPages = [result.pageNumber - 1, result.pageNumber + 1]
     
     for (const pageNum of adjacentPages) {
-      // Skip if already in results
       if (enriched.some(r => r.documentId === result.documentId && r.pageNumber === pageNum)) continue
       
       const { data: adjacent } = await supabase
@@ -94,24 +94,22 @@ async function enrichWithAdjacentPages(results: SearchResult[]): Promise<SearchR
           documentTitle: result.documentTitle,
           pageNumber: pageNum,
           content: adjacent[0].content,
-          similarity: result.similarity * 0.9 // Slightly lower similarity for adjacent
+          similarity: result.similarity * 0.9
         })
       }
     }
   }
   
-  // Sort by page number
   return enriched.sort((a, b) => a.pageNumber - b.pageNumber)
 }
 
-// Keyword-based fallback search (for when vector search fails)
+// Keyword-based fallback search
 export async function keywordSearch(
   keywords: string[],
   options: { limit?: number } = {}
 ): Promise<SearchResult[]> {
   const { limit = 8 } = options
   
-  // Build ilike query for each keyword
   const query = supabase
     .from('chunks')
     .select('id, document_id, page_number, content')
@@ -122,7 +120,6 @@ export async function keywordSearch(
   
   if (error || !chunks) return []
   
-  // Get document titles
   const documentIds = [...new Set(chunks.map(c => c.document_id))]
   const { data: documents } = await supabase
     .from('documents')
@@ -137,6 +134,6 @@ export async function keywordSearch(
     documentTitle: docMap.get(c.document_id) || 'Unknown',
     pageNumber: c.page_number,
     content: c.content,
-    similarity: 0.7 // Default similarity for keyword matches
+    similarity: 0.7
   }))
 }

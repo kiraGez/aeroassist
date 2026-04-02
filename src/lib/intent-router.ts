@@ -1,4 +1,4 @@
-import openai, { CHAT_MODEL } from './openai'
+import { chatCompletion, CHAT_MODEL_NAME } from './ai'
 
 export type IntentType = 'conversational' | 'technical_query' | 'generative_task'
 
@@ -30,30 +30,25 @@ IMPORTANT:
 - Respond with JSON only: {"type": "...", "keywords": [...], "topic": "...", "confidence": 0.0-1.0}`
 
   try {
-    const response = await openai.chat.completions.create({
-      model: CHAT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: query }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1
-    })
+    const response = await chatCompletion(systemPrompt, [
+      { role: 'user', content: query }
+    ])
 
-    const result = JSON.parse(response.choices[0].message.content || '{}')
-    
-    return {
-      type: result.type as IntentType || 'conversational',
-      keywords: result.keywords || [],
-      topic: result.topic,
-      confidence: result.confidence || 0.8
+    // Parse JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0])
+      return {
+        type: result.type as IntentType || 'conversational',
+        keywords: result.keywords || [],
+        topic: result.topic,
+        confidence: result.confidence || 0.8
+      }
     }
+
+    return { type: 'conversational', confidence: 0.5 }
   } catch (error) {
     console.error('Intent classification error:', error)
-    // Default to conversational on error
-    return {
-      type: 'conversational',
-      confidence: 0.5
-    }
+    return { type: 'conversational', confidence: 0.5 }
   }
 }

@@ -1,4 +1,4 @@
-import openai, { CHAT_MODEL } from './openai'
+import { chatCompletion } from './ai'
 import { SearchResult } from './search'
 import { IntentType } from './intent-router'
 
@@ -36,7 +36,6 @@ IMPORTANT NOTES:
 - PDF tables may be extracted poorly; look closely for numbers adjacent to keywords.
 - If a procedure seems incomplete, mention that the manual may have split content.`
 
-  // Add intent-specific instructions
   if (intent === 'generative_task') {
     return `${basePrompt}
 
@@ -59,7 +58,6 @@ TECHNICAL QUERY INSTRUCTIONS:
 - Cite the page number for each fact`
   }
 
-  // Conversational
   return `${basePrompt}
 
 CONVERSATIONAL INSTRUCTIONS:
@@ -83,58 +81,14 @@ export async function generateResponse(
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    ...history.slice(-6), // Keep last 6 messages for context
-    { role: 'user', content: query }
-  ]
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: CHAT_MODEL,
-      messages,
-      max_tokens: maxTokens,
-      temperature
-    })
-
-    return response.choices[0].message.content || 'No response generated.'
-  } catch (error) {
-    console.error('Generation error:', error)
-    throw new Error('Failed to generate response. Please try again.')
-  }
-}
-
-// Stream response for real-time display
-export async function* streamResponse(
-  query: string,
-  intent: IntentType,
-  context: SearchResult[],
-  history: ChatMessage[],
-  options: GenerationOptions = {}
-): AsyncGenerator<string> {
-  const { maxTokens = 2000, temperature = 0.3 } = options
-
-  const systemPrompt = buildSystemPrompt(intent, context)
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
     ...history.slice(-6),
     { role: 'user', content: query }
   ]
 
   try {
-    const stream = await openai.chat.completions.create({
-      model: CHAT_MODEL,
-      messages,
-      max_tokens: maxTokens,
-      temperature,
-      stream: true
-    })
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || ''
-      if (content) yield content
-    }
+    return await chatCompletion(systemPrompt, messages, { maxTokens, temperature })
   } catch (error) {
-    console.error('Stream error:', error)
-    throw new Error('Failed to stream response.')
+    console.error('Generation error:', error)
+    throw new Error('Failed to generate response. Please try again.')
   }
 }

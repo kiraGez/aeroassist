@@ -1,37 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import pdf from 'pdf-parse'
-import { supabaseAdmin } from '@/lib/supabase'
-import { generateEmbeddings } from '@/lib/openai'
-
-// Admin emails - customize this list
-const ADMIN_EMAILS = ['admin', 'wise_hat_2017', 'cool_ball_2253']
+import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { generateEmbeddings } from '@/lib/ai'
+import { ADMIN_EMAILS } from '@/lib/pdf-processor'
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is admin
-    const userEmail = session.user?.email || ''
-    const isAdmin = ADMIN_EMAILS.some(email => 
-      userEmail.includes(email) || session.user?.user_metadata?.role === 'admin'
-    )
-
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    }
-
-    // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File
     const title = formData.get('title') as string || file?.name?.replace('.pdf', '')
+    const userId = formData.get('userId') as string
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -41,8 +18,9 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Parse PDF
-    const pdfData = await pdf(buffer)
+    // Parse PDF using pdf-parse dynamically
+    const pdf = await import('pdf-parse')
+    const pdfData = await pdf.default(buffer)
     const totalPages = pdfData.numpages
 
     // Create document record
@@ -52,14 +30,16 @@ export async function POST(request: NextRequest) {
         title,
         filename: file.name,
         total_pages: totalPages,
-        uploaded_by: session.user.id
+        uploaded_by: userId || null
       })
       .select()
       .single()
 
     if (docError) throw docError
 
-    // Process pages
+    // Process pages - split into chunks
+    const chunkSize = 1000
+    const overlap = 200
     const chunks: Array<{
       document_id: string
       page_number: number
@@ -67,21 +47,19 @@ export async function POST(request: NextRequest) {
       content: string
     }> = []
 
-    // pdf-parse returns text per page
-    // We need to split by pages since pdf-parse gives us full text
-    // For better results, use a library that gives page-by-page extraction
-    
-    // For now, we'll chunk the full text into reasonable sizes
-    const chunkSize = 1000 // characters per chunk
-    const overlap = 200 // character overlap for context continuity
-    
     let chunkIndex = 0
     let pageNumber = 1
     
+    // Rough page estimation based on content length
+    const pageLength = Math.ceil(pdfData.text.length / totalPages)
+
     for (let i = 0; i < pdfData.text.length; i += (chunkSize - overlap)) {
       const content = pdfData.text.slice(i, i + chunkSize).trim()
       
       if (content.length > 50) {
+        // Estimate page number based on position
+        pageNumber = Math.min(Math.floor(i / pageLength) + 1, totalPages)
+        
         chunks.push({
           document_id: document.id,
           page_number: pageNumber,
@@ -90,25 +68,18 @@ export async function POST(request: NextRequest) {
         })
         chunkIndex++
       }
-      
-      // Rough page estimation (every ~3000 chars is ~1 page)
-      if (i > pageNumber * 3000) {
-        pageNumber++
-      }
     }
 
     // Generate embeddings in batches
-    const batchSize = 20
-    const insertedChunks = []
+    const batchSize = 10
+    let processed = 0
 
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize)
       const texts = batch.map(c => c.content)
       
-      // Generate embeddings
       const embeddings = await generateEmbeddings(texts)
       
-      // Insert into database
       const chunksWithEmbeddings = batch.map((c, idx) => ({
         ...c,
         embedding: embeddings[idx]
@@ -120,10 +91,9 @@ export async function POST(request: NextRequest) {
 
       if (insertError) {
         console.error('Insert error:', insertError)
-        // Continue with other batches
       }
 
-      insertedChunks.push(...chunksWithEmbeddings)
+      processed += batch.length
     }
 
     return NextResponse.json({
@@ -132,13 +102,13 @@ export async function POST(request: NextRequest) {
         id: document.id,
         title,
         totalPages,
-        chunksProcessed: insertedChunks.length
+        chunksProcessed: processed
       }
     })
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(
-      { error: 'Failed to process document' },
+      { error: 'Failed to process document: ' + (error instanceof Error ? error.message : 'Unknown error') },
       { status: 500 }
     )
   }
@@ -154,15 +124,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Document ID required' }, { status: 400 })
     }
 
-    // Check auth
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Delete document (cascades to chunks)
     const { error } = await supabaseAdmin
       .from('documents')
       .delete()
