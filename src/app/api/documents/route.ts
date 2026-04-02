@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase'
 import { generateEmbeddings } from '@/lib/ai'
 import { ADMIN_EMAILS } from '@/lib/pdf-processor'
+import PDFParse from 'pdf-parse'
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const title = formData.get('title') as string || file?.name?.replace('.pdf', '')
+    const title = (formData.get('title') as string) || file?.name?.replace('.pdf', '')
     const userId = formData.get('userId') as string
 
     if (!file) {
@@ -18,9 +19,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Parse PDF using pdf-parse dynamically
-    const pdf = await import('pdf-parse')
-    const pdfData = await pdf.default(buffer)
+    // Parse PDF
+    const pdfData = await PDFParse(buffer)
     const totalPages = pdfData.numpages
 
     // Create document record
@@ -50,14 +50,12 @@ export async function POST(request: NextRequest) {
     let chunkIndex = 0
     let pageNumber = 1
     
-    // Rough page estimation based on content length
     const pageLength = Math.ceil(pdfData.text.length / totalPages)
 
     for (let i = 0; i < pdfData.text.length; i += (chunkSize - overlap)) {
       const content = pdfData.text.slice(i, i + chunkSize).trim()
       
       if (content.length > 50) {
-        // Estimate page number based on position
         pageNumber = Math.min(Math.floor(i / pageLength) + 1, totalPages)
         
         chunks.push({
