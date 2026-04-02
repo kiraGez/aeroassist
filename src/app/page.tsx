@@ -1,12 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+
+// Admin emails
+const ADMIN_EMAILS = ['admin', 'wise_hat_2017', 'cool_ball_2253', 'kiraGez']
 
 export default function Home() {
   const [view, setView] = useState<'loading' | 'login' | 'chat'>('loading')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // Check if user is logged in
@@ -149,13 +156,26 @@ export default function Home() {
   }
 
   // Chat view
-  return <ChatView email={email} onLogout={handleLogout} />
+  const isAdmin = ADMIN_EMAILS.some(e => email.toLowerCase().includes(e.toLowerCase()))
+  
+  return (
+    <ChatView 
+      email={email} 
+      isAdmin={isAdmin}
+      onLogout={handleLogout} 
+    />
+  )
 }
 
-function ChatView({ email, onLogout }: { email: string; onLogout: () => void }) {
+function ChatView({ email, isAdmin, onLogout }: { email: string; isAdmin: boolean; onLogout: () => void }) {
   const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  const [documents, setDocuments] = useState<Array<{id: string, title: string, total_pages: number}>>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const send = async () => {
     if (!input.trim() || loading) return
