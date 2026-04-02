@@ -4,7 +4,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 // Models
 const EMBEDDING_MODEL = 'text-embedding-004'
-const CHAT_MODEL = 'gemini-1.5-flash'
+const CHAT_MODEL = 'gemini-2.5-flash'
 
 // Generate embedding for text
 export async function generateEmbedding(text: string): Promise<number[]> {
