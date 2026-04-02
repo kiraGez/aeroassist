@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateEmbeddings } from '@/lib/ai'
-import pdfParse from 'pdf-parse'
+import * as pdfParse from 'pdf-parse'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer)
 
     // Parse PDF
-    const pdfData = await pdfParse(buffer)
+    const parse = (pdfParse as any).default || pdfParse
+    const pdfData = await parse(buffer)
     const totalPages = pdfData.numpages
 
     // Create document record
