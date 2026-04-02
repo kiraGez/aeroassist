@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 // Admin emails
-const ADMIN_EMAILS = ['admin', 'wise_hat_2017', 'cool_ball_2253', 'kiraGez']
+const ADMIN_EMAILS = ['admin', 'wise_hat_2017', 'cool_ball_2253', 'kiraGez', 'kiragez3@gmail.com']
 
 export default function Home() {
   const [view, setView] = useState<'loading' | 'login' | 'chat'>('loading')
