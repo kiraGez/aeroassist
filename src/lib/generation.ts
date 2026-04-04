@@ -13,7 +13,7 @@ export interface GenerationOptions {
 }
 
 // Build system prompt based on intent and context
-function buildSystemPrompt(
+export function buildSystemPrompt(
   intent: IntentType, 
   context: SearchResult[],
   topic?: string
