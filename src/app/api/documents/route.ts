@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateEmbeddings } from '@/lib/ai'
-import * as pdfParse from 'pdf-parse'
+
+// Dynamic import for CommonJS module
+const pdfParse = require('pdf-parse')
 
 export async function POST(request: NextRequest) {
   try {

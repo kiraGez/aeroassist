@@ -1,15 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
+
+async function getAuthenticatedUser() {
+  const cookieStore = await cookies()
+  
+  const supabaseServer = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Handle cookie error in middleware
+          }
+        },
+      },
+    }
+  )
+
+  return supabaseServer.auth.getUser()
+}
 
 // GET: List messages for a conversation
 export async function GET(request: NextRequest) {
   try {
-    const supabaseAuth = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+    const { data: { user } } = await getAuthenticatedUser()
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -25,7 +51,7 @@ export async function GET(request: NextRequest) {
       .from('conversations')
       .select('id')
       .eq('id', conversationId)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .single()
 
     if (!conversation) {
@@ -52,10 +78,9 @@ export async function GET(request: NextRequest) {
 // POST: Save a message to a conversation
 export async function POST(request: NextRequest) {
   try {
-    const supabaseAuth = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+    const { data: { user } } = await getAuthenticatedUser()
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -71,7 +96,7 @@ export async function POST(request: NextRequest) {
       .from('conversations')
       .select('id')
       .eq('id', conversation_id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .single()
 
     if (!conversation) {

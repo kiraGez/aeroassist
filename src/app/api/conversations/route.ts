@@ -1,15 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
+
+async function getAuthenticatedUser() {
+  const cookieStore = await cookies()
+  
+  const supabaseServer = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Handle cookie error in middleware
+          }
+        },
+      },
+    }
+  )
+
+  return supabaseServer.auth.getUser()
+}
 
 // GET: List all conversations for the authenticated user
 export async function GET(request: NextRequest) {
   try {
-    const supabaseAuth = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+    const { data: { user } } = await getAuthenticatedUser()
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -22,7 +48,7 @@ export async function GET(request: NextRequest) {
         updated_at,
         messages(count)
       `)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(50)
 
@@ -40,10 +66,9 @@ export async function GET(request: NextRequest) {
 // POST: Create a new conversation
 export async function POST(request: NextRequest) {
   try {
-    const supabaseAuth = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+    const { data: { user } } = await getAuthenticatedUser()
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -53,7 +78,7 @@ export async function POST(request: NextRequest) {
     const { data: conversation, error } = await supabase
       .from('conversations')
       .insert({
-        user_id: session.user.id,
+        user_id: user.id,
         title: title || 'New Conversation'
       })
       .select()
@@ -73,10 +98,9 @@ export async function POST(request: NextRequest) {
 // DELETE: Delete a conversation
 export async function DELETE(request: NextRequest) {
   try {
-    const supabaseAuth = createRouteHandlerClient({ cookies })
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+    const { data: { user } } = await getAuthenticatedUser()
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -91,7 +115,7 @@ export async function DELETE(request: NextRequest) {
       .from('conversations')
       .delete()
       .eq('id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
